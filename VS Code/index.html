@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-sensor Health Monitoring Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.24.2/plotly.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --accent-color: #4895ef;
+            --success-color: #4cc9f0;
+            --warning-color: #f72585;
+            --danger-color: #ff006e;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --text-color: #495057;
+            --light-bg: #f5f7fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--text-color);
+        }
+
+        .dashboard-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+            color: white;
+            padding: 20px 0;
+            border-radius: 0 0 20px 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-badge {
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 50px;
+            padding: 8px 15px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            display: inline-block;
+        }
+
+        .status-dot.connected {
+            background-color: #28a745;
+        }
+
+        .card {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+            border: none;
+            margin-bottom: 20px;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            font-weight: 600;
+            color: var(--primary-color);
+            padding: 15px 20px;
+        }
+
+        .sensor-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 10px 0;
+            line-height: 1;
+        }
+
+        .value-card {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(45deg, #ffffff 0%, #f9fafb 100%);
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 280px;
+        }
+
+        .unit {
+            font-size: 0.9rem;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .parameter-name {
+            margin-bottom: 10px;
+            color: var(--text-color);
+            font-weight: 500;
+        }
+
+        .connection-form {
+            background-color: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+        }
+
+        .connect-btn {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .connect-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .disconnect-btn {
+            background: linear-gradient(135deg, #dc3545 0%, #ff4d5a 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .disconnect-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-title {
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            border-left: 5px solid var(--accent-color);
+            padding-left: 15px;
+        }
+
+        .heartbeat {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .normal-text {
+            color: #20c997;
+        }
+
+        .warning-text {
+            color: #fd7e14;
+        }
+
+        .danger-text {
+            color: #dc3545;
+        }
+
+        .motion-item {
+            margin-bottom: 10px;
+        }
+
+        .motion-label {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .progress {
+            height: 10px;
+            border-radius: 10px;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            display: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .log-entry:nth-child(odd) {
+            background-color: rgba(0, 0, 0, 0.03);
+        }
+
+        .log-time {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .welcome-screen {
+            text-align: center;
+            padding: 50px 20px;
+            background-color: white;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .welcome-icon {
+            font-size: 50px;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+        }
+
+        /* Status indicator styles */
+        #fall-indicator,
+        #immobility-indicator {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* Alert animations */
+        .alert {
+            animation: slideIn 0.5s forwards;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Additional metrics styling */
+        #additional-metrics-row .card {
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+
+        #additional-metrics-row .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .stress-gauge-container {
+            height: 260px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #stress-level-text {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        #stress-value-text {
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .stress-low {
+            color: #20c997;
+        }
+
+        .stress-high {
+            color: #dc3545;
+        }
+
+        #stress-prediction-text {
+            margin-top: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1>Health Monitoring Dashboard</h1>
+                    <p class="mb-0">Real-time sensor data visualization</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <div class="status-badge">
+                        <span class="status-dot" id="connection-dot"></span>
+                        <span id="connection-status">Disconnected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Server Connection Form -->
+        <div class="connection-form">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="server-ip" class="form-label">Server IP</label>
+                        <input type="text" class="form-control" id="server-ip" placeholder="192.168.1.100" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="server-port" class="form-label">Port</label>
+                        <input type="text" class="form-control" id="server-port" placeholder="5000" value="5000" />
+                    </div>
+                </div>
+                <div class="col-md-5 d-flex align-items-end">
+                    <button id="connect-btn" class="connect-btn me-2">Connect</button>
+                    <button id="disconnect-btn" class="disconnect-btn" style="display:none">Disconnect</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Welcome Screen - Visible before connection -->
+        <div id="welcome-screen" class="welcome-screen">
+            <div class="welcome-icon">🩺</div>
+            <h2>Welcome to Health Monitoring Dashboard</h2>
+            <p class="lead">Connect to your ESP32 server to view real-time health monitoring data.</p>
+            <p>Enter the server IP address and port above to get started.</p>
+        </div>
+
+        <!-- Dashboard content - Hidden initially -->
+        <div id="dashboard-content" style="display: none;">
+            <!-- Vital Signs Section -->
+            <h2 class="section-title">Vital Signs</h2>
+            <div class="row">
+                <div class="col-md-3 col-sm-6">
+                    <div class="card value-card" id="hr-card">
+                        <div class="parameter-name">Heart Rate</div>
+                        <div class="sensor-value heartbeat" id="hr-value">-</div>
+                        <div class="unit">BPM</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="card value-card" id="spo2-card">
+                        <div class="parameter-name">SpO₂</div>
+                        <div class="sensor-value" id="spo2-value">-</div>
+                        <div class="unit">%</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="card value-card" id="bp-card">
+                        <div class="parameter-name">Blood Pressure</div>
+                        <div class="sensor-value" id="bp-value">-</div>
+                        <div class="unit">mmHg</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="card value-card" id="temp-card">
+                        <div class="parameter-name">Temperature</div>
+                        <div class="sensor-value" id="temp-value">-</div>
+                        <div class="unit">°C</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <h2 class="section-title">Real-time Monitoring</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            ECG Signal
+                        </div>
+                        <div class="card-body">
+                            <div id="ecg-chart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            EMG Signal
+                        </div>
+                        <div class="card-body">
+                            <div id="emg-chart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            Heart Rate Trend
+                        </div>
+                        <div class="card-body">
+                            <div id="hr-chart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            SpO₂ & Temperature Trend
+                        </div>
+                        <div class="card-body">
+                            <div id="spo2-temp-chart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Motion Data Section -->
+            <h2 class="section-title">Motion & Accelerometer Data</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            Accelerometer
+                        </div>
+                        <div class="card-body">
+                            <div class="motion-item">
+                                <div class="motion-label">X-Axis</div>
+                                <div class="progress">
+                                    <div id="accel-x-progress" class="progress-bar bg-info" role="progressbar"
+                                        style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small>-5g</small>
+                                    <small id="accel-x-value">0.00 g</small>
+                                    <small>+5g</small>
+                                </div>
+                            </div>
+                            <div class="motion-item">
+                                <div class="motion-label">Y-Axis</div>
+                                <div class="progress">
+                                    <div id="accel-y-progress" class="progress-bar bg-info" role="progressbar"
+                                        style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small>-5g</small>
+                                    <small id="accel-y-value">0.00 g</small>
+                                    <small>+5g</small>
+                                </div>
+                            </div>
+                            <div class="motion-item">
+                                <div class="motion-label">Z-Axis</div>
+                                <div class="progress">
+                                    <div id="accel-z-progress" class="progress-bar bg-info" role="progressbar"
+                                        style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small>-5g</small>
+                                    <small id="accel-z-value">0.00 g</small>
+                                    <small>+5g</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            Gyroscope
+                        </div>
+                        <div class="card-body">
+                            <div class="motion-item">
+                                <div class="motion-label">X-Axis</div>
+                                <div class="progress">
+                                    <div id="gyro-x-progress" class="progress-bar bg-success" role="progressbar"
+                                        style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small>-250°/s</small>
+                                    <small id="gyro-x-value">0.00 °/s</small>
+                                    <small>+250°/s</small>
+                                </div>
+                            </div>
+                            <div class="motion-item">
+                                <div class="motion-label">Y-Axis</div>
+                                <div class="progress">
+                                    <div id="gyro-y-progress" class="progress-bar bg-success" role="progressbar"
+                                        style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small>-250°/s</small>
+                                    <small id="gyro-y-value">0.00 °/s</small>
+                                    <small>+250°/s</small>
+                                </div>
+                            </div>
+                            <div class="motion-item">
+                                <div class="motion-label">Z-Axis</div>
+                                <div class="progress">
+                                    <div id="gyro-z-progress" class="progress-bar bg-success" role="progressbar"
+                                        style="width: 0%"></div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small>-250°/s</small>
+                                    <small id="gyro-z-value">0.00 °/s</small>
+                                    <small>+250°/s</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Log Section -->
+            <h2 class="section-title">Data Logs</h2>
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Incoming Data</span>
+                            <button id="clear-logs" class="btn btn-sm btn-outline-secondary">Clear</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="data-log" class="log-container">
+                                <div class="log-entry">
+                                    <span class="log-time">[System]</span> Ready to receive data...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Add this section right after the Vital Signs section -->
+            <h2 class="section-title">Fall & Mobility Status</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Fall Detection</span>
+                            <span id="fall-indicator" class="status-dot bg-success"></span>
+                        </div>
+                        <div class="card-body text-center">
+                            <h3 id="fall-status">Not Detected</h3>
+                            <div id="fall-alert-container"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Immobility Detection</span>
+                            <span id="immobility-indicator" class="status-dot bg-success"></span>
+                        </div>
+                        <div class="card-body text-center">
+                            <h3 id="immobility-status">Not Detected</h3>
+                            <div id="immobility-alert-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Add this section right after the "Fall & Mobility Status" section -->
+            <h2 class="section-title">Stress Monitoring</h2>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            
+                        </div>
+                        <div class="card-body text-center">
+                            <div class="stress-gauge-container">
+                                <div id="stress-gauge"></div>
+                            </div>
+                            <div class="mt-3">
+                                <h3 id="stress-level-text">Normal</h3>
+                                <p id="stress-value-text">Value: 0</p>
+                                <p id="stress-prediction-text" style="font-weight: 600; font-size: 1.2rem; margin-top: 5px;">Status: -</p>
+                                <div id="stress-probabilities" style="font-size: 0.9rem; margin-top: 5px; color: #555;">
+                                    <!-- Probabilities will be displayed here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            Stress Level Trend
+                        </div>
+                        <div class="card-body">
+                            <div id="stress-chart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add this section for additional metrics -->
+            <h2 class="section-title">Additional Metrics</h2>
+            <div id="additional-metrics-row" class="row">
+                <!-- Metrics will be dynamically added here -->
+            </div>
+
+            <!-- Add this for alerts -->
+            <div id="alerts-container" class="mb-4">
+                <!-- Alerts will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // Variables
+            let socket = null;
+            let connected = false;
+            let serverUrl = '';
+
+            // Data Storage
+            const maxDataPoints = 100;
+            let ecgData = Array(maxDataPoints).fill(0);
+            let emgData = Array(maxDataPoints).fill(0);
+            let hrData = [];
+            let spo2Data = [];
+            let tempData = [];
+            let timeLabels = [];
+
+            // Initialize Charts
+            const ecgChart = initializeChart('ecg-chart', 'ECG Signal', 'mV');
+            const emgChart = initializeChart('emg-chart', 'EMG Signal', 'mV');
+            const hrChart = initializeLineChart('hr-chart', 'Heart Rate Over Time', 'BPM');
+            const spo2TempChart = initializeDualLineChart('spo2-temp-chart', 'SpO₂ & Temperature', '%', '°C');
+
+            // Connect Button Click
+            $('#connect-btn').click(function () {
+                const ip = $('#server-ip').val() || '127.0.0.1';
+                const port = $('#server-port').val() || '5000';
+                serverUrl = `http://${ip}:${port}`;
+
+                connectToServer(serverUrl);
+            });
+
+            // Disconnect Button Click
+            $('#disconnect-btn').click(function () {
+                disconnectFromServer();
+            });
+
+            // Clear Logs Button Click
+            $('#clear-logs').click(function () {
+                $('#data-log').empty();
+                addLogEntry('Logs cleared');
+            });
+
+            // Connect to WebSocket Server
+            function connectToServer(url) {
+                $('#loading').show();
+
+                try {
+                    // Initialize socket.io connection
+                    socket = io(url);
+
+                    // Connection established
+                    socket.on('connect', function () {
+                        connected = true;
+                        updateConnectionStatus(true);
+                        $('#loading').hide();
+
+                        // Show dashboard
+                        $('#welcome-screen').hide();
+                        $('#dashboard-content').show();
+
+                        addLogEntry('Connected to server at ' + url);
+                    });
+
+                    // Connection error
+                    socket.on('connect_error', function (error) {
+                        addLogEntry('Connection error: ' + error, 'error');
+                        $('#loading').hide();
+                        updateConnectionStatus(false);
+                    });
+
+                    // Connection timeout
+                    socket.on('connect_timeout', function () {
+                        addLogEntry('Connection timeout', 'error');
+                        $('#loading').hide();
+                        updateConnectionStatus(false);
+                    });
+
+                    // Disconnected
+                    socket.on('disconnect', function () {
+                        connected = false;
+                        updateConnectionStatus(false);
+                        addLogEntry('Disconnected from server');
+                    });
+
+        // Receive sensor data
+        socket.on('sensor_data', function (data) {
+            processIncomingData(data);
+        });
+
+        // Receive stress prediction data
+        socket.on('stress_prediction', function (data) {
+            console.log('Received stress_prediction:', data);
+            if (data && data.raw_output !== undefined) {
+                // Use confidence to scale stress value between 0 and 100
+                let stressValue = data.confidence !== undefined ? data.confidence * 100 : (data.raw_output === 1 ? 80 : 20);
+                console.log('Mapped stress value:', stressValue);
+                updateStressLevel(stressValue);
+                // Update prediction status text
+                if (data.prediction !== undefined) {
+                    $('#stress-prediction-text').text('Status: ' + data.prediction);
+                }
+                // Update probabilities display
+                if (data.probabilities !== undefined && Array.isArray(data.probabilities)) {
+                    let probText = 'Probabilities: ';
+                    data.probabilities.forEach((prob, index) => {
+                        probText += `Class ${index}: ${(prob * 100).toFixed(1)}% `;
+                    });
+                    $('#stress-probabilities').text(probText);
+                } else {
+                    $('#stress-probabilities').text('');
+                }
+            } else {
+                console.warn('Invalid stress_prediction data received:', data);
+            }
+        });
+
+        // Removed fall_prediction event listener as per user request to use free_fall from sensor_data only
+
+        // Receive immobility prediction data
+        socket.on('immobility_prediction', function (data) {
+            console.log('Received immobility_prediction:', data);
+            if (data && data.prediction !== undefined) {
+                const immobilityDetected = data.prediction === "Immobility Detected";
+                updateImmobilityDetection(immobilityDetected ? 1 : 0);
+            } else {
+                console.warn('Invalid immobility_prediction data received:', data);
+            }
+        });
+
+                } catch (error) {
+                    $('#loading').hide();
+                    addLogEntry('Error: ' + error.message, 'error');
+                    updateConnectionStatus(false);
+                }
+            }
+
+            // Disconnect from Server
+            function disconnectFromServer() {
+                if (socket) {
+                    socket.disconnect();
+                    socket = null;
+                }
+                connected = false;
+                updateConnectionStatus(false);
+                $('#dashboard-content').hide();
+                $('#welcome-screen').show();
+            }
+
+            // Update Connection Status UI
+            function updateConnectionStatus(isConnected) {
+                if (isConnected) {
+                    $('#connection-status').text('Connected');
+                    $('#connection-dot').addClass('connected');
+                    $('#connect-btn').hide();
+                    $('#disconnect-btn').show();
+                } else {
+                    $('#connection-status').text('Disconnected');
+                    $('#connection-dot').removeClass('connected');
+                    $('#connect-btn').show();
+                    $('#disconnect-btn').hide();
+                }
+            }
+
+            // Process Incoming Data
+            function processIncomingData(data) {
+                addLogEntry('Received data: ' + JSON.stringify(data));
+                console.log('processIncomingData free_fall:', data.free_fall);
+
+                // Update vital signs
+                if (data.hr) {
+                    updateHeartRate(data.hr);
+                }
+
+                if (data.spo2) {
+                    updateSpO2(data.spo2);
+                }
+
+                if (data.sys && data.dia) {
+                    updateBloodPressure(data.sys, data.dia);
+                }
+
+                if (data.temperature) {
+                    updateTemperature(data.temperature);
+                }
+
+                // Update ECG data
+                if (data.ecg) {
+                    updateECGData(data.ecg);
+                }
+
+                // Update EMG data
+                if (data.emg) {
+                    updateEMGData(data.emg);
+                }
+
+                // Update accelerometer data from the new format
+                if (data.y !== undefined && data.z !== undefined) {
+                    // Assuming x might be missing in the data, providing a default
+                    const accData = {
+                        x: data.x || 0,
+                        y: data.y,
+                        z: data.z
+                    };
+                    updateAccelerometer(accData);
+                } else if (data.accelerometer) {
+                    // Support the original format too
+                    updateAccelerometer(data.accelerometer);
+                }
+
+                // Update gyroscope data from the new format
+                if (data.gyroscope && data.gyroscope.x !== undefined) {
+                    updateGyroscope(data.gyroscope);
+                } else if (data.x !== undefined && data.y !== undefined && data.z !== undefined) {
+                    // This assumes the top-level x,y,z are gyroscope readings if not specified as accelerometer
+                    const gyroData = {
+                        x: data.x,
+                        y: data.y,
+                        z: data.z
+                    };
+                    updateGyroscope(gyroData);
+                }
+
+                // Handle fall detection using fall_detected field from Arduino
+                if (data.fall_detected !== undefined) {
+                    updateFallDetection(data.fall_detected === 1);
+                }
+
+                // Handle immobility detection
+                if (data.immobility_detected !== undefined) {
+                    updateImmobilityDetection(data.immobility_detected);
+                }
+
+                // Handle additional metrics
+                if (data.acc_max !== undefined) {
+                    updateAdditionalMetric('acc-max', 'Max Acceleration', data.acc_max, 'g');
+                }
+
+                if (data.gyro_max !== undefined) {
+                    updateAdditionalMetric('gyro-max', 'Max Gyroscope', data.gyro_max, '°/s');
+                }
+
+                if (data.lin_max !== undefined) {
+                    updateAdditionalMetric('lin-max', 'Linear Max', data.lin_max, 'g');
+                }
+
+                if (data.acc_skewness !== undefined) {
+                    updateAdditionalMetric('acc-skew', 'Acc Skewness', data.acc_skewness, '');
+                }
+
+                if (data.gyro_skewness !== undefined) {
+                    updateAdditionalMetric('gyro-skew', 'Gyro Skewness', data.gyro_skewness, '');
+                }
+            }
+
+            // Update Heart Rate
+            function updateHeartRate(hr) {
+                $('#hr-value').text(parseFloat(hr).toFixed(1));
+
+                // Color coding based on heart rate range
+                if (hr < 60) {
+                    $('#hr-value').removeClass('normal-text danger-text').addClass('warning-text');
+                } else if (hr > 100) {
+                    $('#hr-value').removeClass('normal-text warning-text').addClass('danger-text');
+                } else {
+                    $('#hr-value').removeClass('warning-text danger-text').addClass('normal-text');
+                }
+
+                // Update chart data
+                updateTimeSeriesData(hrData, hr, timeLabels);
+                updateLineChart(hrChart, timeLabels, hrData);
+            }
+
+            // Update SpO2
+            function updateSpO2(spo2) {
+                $('#spo2-value').text(parseFloat(spo2).toFixed(1));
+
+                // Color coding based on SpO2 range
+                if (spo2 < 95) {
+                    $('#spo2-value').removeClass('normal-text warning-text').addClass('danger-text');
+                } else if (spo2 < 97) {
+                    $('#spo2-value').removeClass('normal-text danger-text').addClass('warning-text');
+                } else {
+                    $('#spo2-value').removeClass('warning-text danger-text').addClass('normal-text');
+                }
+
+                // Update chart data
+                updateTimeSeriesData(spo2Data, spo2, timeLabels);
+                updateDualLineChart(spo2TempChart, timeLabels, spo2Data, tempData);
+            }
+
+            // Update Blood Pressure
+            function updateBloodPressure(systolic, diastolic) {
+                $('#bp-value').text(`${parseInt(systolic)}/${parseInt(diastolic)}`);
+
+                // Color coding based on blood pressure ranges
+                if (systolic > 139 || diastolic > 89) {
+                    $('#bp-value').removeClass('normal-text warning-text').addClass('danger-text');
+                } else if (systolic > 129 || diastolic > 84) {
+                    $('#bp-value').removeClass('normal-text danger-text').addClass('warning-text');
+                } else if (systolic < 90 || diastolic < 60) {
+                    $('#bp-value').removeClass('normal-text danger-text').addClass('warning-text');
+                } else {
+                    $('#bp-value').removeClass('warning-text danger-text').addClass('normal-text');
+                }
+            }
+
+            // Update Temperature
+            function updateTemperature(temp) {
+                $('#temp-value').text(parseFloat(temp).toFixed(1));
+
+                // Color coding based on temperature range
+                if (temp > 37.5) {
+                    $('#temp-value').removeClass('normal-text warning-text').addClass('danger-text');
+                } else if (temp > 37.0) {
+                    $('#temp-value').removeClass('normal-text danger-text').addClass('warning-text');
+                } else if (temp < 36.0) {
+                    $('#temp-value').removeClass('normal-text danger-text').addClass('warning-text');
+                } else {
+                    $('#temp-value').removeClass('warning-text danger-text').addClass('normal-text');
+                }
+
+                // Update chart data
+                updateTimeSeriesData(tempData, temp, timeLabels);
+                updateDualLineChart(spo2TempChart, timeLabels, spo2Data, tempData);
+            }
+
+            // Update ECG Data
+            function updateECGData(ecgValue) {
+                ecgData.shift();
+                ecgData.push(parseFloat(ecgValue));
+
+                Plotly.update('ecg-chart', {
+                    y: [ecgData]
+                });
+            }
+
+            // Update EMG Data
+            function updateEMGData(emgValue) {
+                emgData.shift();
+                emgData.push(parseFloat(emgValue));
+
+                Plotly.update('emg-chart', {
+                    y: [emgData]
+                });
+            }
+
+            // Update Accelerometer Data
+            function updateAccelerometer(acc) {
+                if (acc.x !== undefined) {
+                    updateProgressBar('accel-x', acc.x, -5, 5, 'g');
+                }
+                if (acc.y !== undefined) {
+                    updateProgressBar('accel-y', acc.y, -5, 5, 'g');
+                }
+                if (acc.z !== undefined) {
+                    updateProgressBar('accel-z', acc.z, -5, 5, 'g');
+                }
+            }
+
+            // Update Gyroscope Data
+            function updateGyroscope(gyro) {
+                if (gyro.x !== undefined) {
+                    updateProgressBar('gyro-x', gyro.x, -250, 250, '°/s');
+                }
+                if (gyro.y !== undefined) {
+                    updateProgressBar('gyro-y', gyro.y, -250, 250, '°/s');
+                }
+                if (gyro.z !== undefined) {
+                    updateProgressBar('gyro-z', gyro.z, -250, 250, '°/s');
+                }
+            }
+
+            // Update Progress Bar
+            function updateProgressBar(id, value, min, max, unit) {
+                const percentage = ((value - min) / (max - min)) * 100;
+                $(`#${id}-progress`).css('width', `${percentage}%`);
+                $(`#${id}-value`).text(`${value.toFixed(2)} ${unit}`);
+            }
+
+            // Add Log Entry
+            function addLogEntry(message, type = 'info') {
+                const time = moment().format('HH:mm:ss');
+                const logClass = type === 'error' ? 'text-danger' : '';
+
+                const logEntry = `
+                    <div class="log-entry ${logClass}">
+                        <span class="log-time">[${time}]</span> ${message}
+                    </div>
+                `;
+
+                $('#data-log').append(logEntry);
+                $('#data-log').scrollTop($('#data-log')[0].scrollHeight);
+
+                // Limit log entries to prevent excessive memory usage
+                if ($('#data-log .log-entry').length > 100) {
+                    $('#data-log .log-entry').first().remove();
+                }
+            }
+
+            // Initialize Charts
+            function initializeChart(elementId, title, yAxisTitle) {
+                const xData = Array(maxDataPoints).fill(0).map((_, i) => i);
+                const yData = Array(maxDataPoints).fill(0);
+
+                const layout = {
+                    title: title,
+                    height: 280,
+                    margin: { l: 50, r: 20, t: 40, b: 30 },
+                    xaxis: {
+                        showticklabels: false,
+                        title: 'Time'
+                    },
+                    yaxis: {
+                        title: yAxisTitle
+                    },
+                    font: {
+                        family: 'Segoe UI, sans-serif'
+                    }
+                };
+
+                const data = [{
+                    x: xData,
+                    y: yData,
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: {
+                        color: '#4361ee',
+                        width: 2
+                    }
+                }];
+
+                Plotly.newPlot(elementId, data, layout, { responsive: true });
+                return document.getElementById(elementId);
+            }
+
+            // Initialize Line Chart for time series data
+            function initializeLineChart(elementId, title, yAxisTitle) {
+                const layout = {
+                    title: title,
+                    height: 280,
+                    margin: { l: 50, r: 20, t: 40, b: 40 },
+                    xaxis: {
+                        title: 'Time'
+                    },
+                    yaxis: {
+                        title: yAxisTitle
+                    },
+                    font: {
+                        family: 'Segoe UI, sans-serif'
+                    }
+                };
+
+                const data = [{
+                    x: [],
+                    y: [],
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: {
+                        color: '#4895ef',
+                        width: 2
+                    },
+                    marker: {
+                        color: '#4361ee',
+                        size: 6
+                    }
+                }];
+
+                Plotly.newPlot(elementId, data, layout, { responsive: true });
+                return document.getElementById(elementId);
+            }
+
+            // Initialize Dual Line Chart for comparing two parameters
+            function initializeDualLineChart(elementId, title, yAxis1Title, yAxis2Title) {
+                const layout = {
+                    title: title,
+                    height: 280,
+                    margin: { l: 50, r: 50, t: 40, b: 40 },
+                    xaxis: {
+                        title: 'Time'
+                    },
+                    yaxis: {
+                        title: yAxis1Title,
+                        titlefont: { color: '#4895ef' },
+                        tickfont: { color: '#4895ef' }
+                    },
+                    yaxis2: {
+                        title: yAxis2Title,
+                        titlefont: { color: '#f72585' },
+                        tickfont: { color: '#f72585' },
+                        overlaying: 'y',
+                        side: 'right'
+                    },
+                    legend: {
+                        orientation: 'h',
+                        y: -0.2
+                    },
+                    font: {
+                        family: 'Segoe UI, sans-serif'
+                    }
+                };
+
+                const data = [
+                    {
+                        x: [],
+                        y: [],
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: 'SpO₂',
+                        line: {
+                            color: '#4895ef',
+                            width: 2
+                        },
+                        marker: {
+                            color: '#4361ee',
+                            size: 6
+                        }
+                    },
+                    {
+                        x: [],
+                        y: [],
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: 'Temperature',
+                        yaxis: 'y2',
+                        line: {
+                            color: '#f72585',
+                            width: 2
+                        },
+                        marker: {
+                            color: '#ff006e',
+                            size: 6
+                        }
+                    }
+                ];
+
+                Plotly.newPlot(elementId, data, layout, { responsive: true });
+                return document.getElementById(elementId);
+            }
+
+            // Update Time Series Data
+            function updateTimeSeriesData(dataArray, newValue, labels) {
+                // Add timestamp
+                const now = moment().format('HH:mm:ss');
+
+                // Add new data point
+                dataArray.push(parseFloat(newValue));
+                labels.push(now);
+
+                // Limit data points to keep charts efficient
+                if (dataArray.length > 20) {
+                    dataArray.shift();
+                    labels.shift();
+                }
+            }
+
+            // Update Line Chart
+            function updateLineChart(chart, xData, yData) {
+                Plotly.update(chart, {
+                    x: [xData],
+                    y: [yData]
+                });
+            }
+
+            // Update Dual Line Chart
+            function updateDualLineChart(chart, xData, yData1, yData2) {
+                Plotly.update(chart, {
+                    x: [xData, xData],
+                    y: [yData1, yData2]
+                });
+            }
+            // Update the processIncomingData function to handle the new sensor data
+            function processIncomingData(data) {
+                addLogEntry('Received data: ' + JSON.stringify(data));
+
+                // Update vital signs
+                if (data.hr) {
+                    updateHeartRate(data.hr);
+                }
+
+                if (data.spo2) {
+                    updateSpO2(data.spo2);
+                }
+
+                if (data.sys && data.dia) {
+                    updateBloodPressure(data.sys, data.dia);
+                }
+
+                if (data.temperature) {
+                    updateTemperature(data.temperature);
+                }
+
+                // Update ECG data
+                if (data.ecg) {
+                    updateECGData(data.ecg);
+                }
+
+                // Update EMG data
+                if (data.emg) {
+                    updateEMGData(data.emg);
+                }
+
+                // Update accelerometer data from the new format
+                if (data.y !== undefined && data.z !== undefined) {
+                    // Assuming x might be missing in the data, providing a default
+                    const accData = {
+                        x: data.x || 0,
+                        y: data.y,
+                        z: data.z
+                    };
+                    updateAccelerometer(accData);
+                } else if (data.accelerometer) {
+                    // Support the original format too
+                    updateAccelerometer(data.accelerometer);
+                }
+
+                // Update gyroscope data from the new format
+                if (data.gyroscope && data.gyroscope.x !== undefined) {
+                    updateGyroscope(data.gyroscope);
+                } else if (data.x !== undefined && data.y !== undefined && data.z !== undefined) {
+                    // This assumes the top-level x,y,z are gyroscope readings if not specified as accelerometer
+                    const gyroData = {
+                        x: data.x,
+                        y: data.y,
+                        z: data.z
+                    };
+                    updateGyroscope(gyroData);
+                }
+
+                // Handle fall detection using fall_detected field from Arduino
+                if (data.fall_detected !== undefined) {
+                    updateFallDetection(data.fall_detected === 1);
+                }
+
+                // Handle immobility detection
+                if (data.immobility_detected !== undefined) {
+                    updateImmobilityDetection(data.immobility_detected);
+                }
+
+                // Handle additional metrics
+                if (data.acc_max !== undefined) {
+                    updateAdditionalMetric('acc-max', 'Max Acceleration', data.acc_max, 'g');
+                }
+
+                if (data.gyro_max !== undefined) {
+                    updateAdditionalMetric('gyro-max', 'Max Gyroscope', data.gyro_max, '°/s');
+                }
+
+                if (data.lin_max !== undefined) {
+                    updateAdditionalMetric('lin-max', 'Linear Max', data.lin_max, 'g');
+                }
+
+                if (data.acc_skewness !== undefined) {
+                    updateAdditionalMetric('acc-skew', 'Acc Skewness', data.acc_skewness, '');
+                }
+
+                if (data.gyro_skewness !== undefined) {
+                    updateAdditionalMetric('gyro-skew', 'Gyro Skewness', data.gyro_skewness, '');
+                }
+            }
+
+            // Add new functions to handle fall detection
+            function updateFallDetection(fallDetected) {
+                addLogEntry('updateFallDetection called with value: ' + fallDetected);
+                console.log('updateFallDetection called with value:', fallDetected);
+
+                const fallStatus = !!fallDetected;
+
+                // Clear previous alert
+                $('#fall-alert-container').empty();
+
+                if (fallStatus) {
+                    // Show alert for fall detection inside fall-alert-container
+                    const alertHtml = `
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <strong>Fall Detected!</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                    $('#fall-alert-container').append(alertHtml);
+
+                    // Auto-dismiss after 5 seconds
+                    setTimeout(() => {
+                        $('#fall-alert-container .alert').alert('close');
+                    }, 5000);
+
+                    addLogEntry('ALERT: Fall detected!', 'error');
+                }
+
+                // Update fall status indicator (you'll need to add this element to your HTML)
+                $('#fall-status').text(fallStatus ? 'DETECTED' : 'Not Detected');
+                $('#fall-indicator').toggleClass('bg-danger', fallStatus);
+                $('#fall-indicator').toggleClass('bg-success', !fallStatus);
+            }
+
+            // Add new functions to handle immobility detection
+            function updateImmobilityDetection(immobilityDetected) {
+                const immobilityStatus = parseInt(immobilityDetected) === 1;
+
+                // Clear previous alert
+                $('#immobility-alert-container').empty();
+
+                if (immobilityStatus) {
+                    // Show alert for immobility detection inside immobility-alert-container
+                    const alertHtml = `
+                        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                            <strong>Immobility Detected!</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                    $('#immobility-alert-container').append(alertHtml);
+
+                    // Auto-dismiss after 5 seconds
+                    setTimeout(() => {
+                        $('#immobility-alert-container .alert').alert('close');
+                    }, 5000);
+
+                    addLogEntry('ALERT: Immobility detected!', 'error');
+                }
+
+                // Update immobility status indicator (you'll need to add this element to your HTML)
+                $('#immobility-status').text(immobilityStatus ? 'DETECTED' : 'Not Detected');
+                $('#immobility-indicator').toggleClass('bg-warning', immobilityStatus);
+                $('#immobility-indicator').toggleClass('bg-success', !immobilityStatus);
+            }
+
+            // Add after charts initialization
+            const stressGauge = initializeGaugeChart('stress-gauge', 'Stress Level', 0, 100);
+            const stressChart = initializeLineChart('stress-chart', 'Stress Level Over Time', 'Level');
+            let stressData = [];
+
+            // Initialize Gauge Chart for stress level
+            function initializeGaugeChart(elementId, title, min, max) {
+                const layout = {
+                    title: title,
+                    height: 200,
+                    margin: { l: 25, r: 25, t: 30, b: 0 },
+                    font: {
+                        family: 'Segoe UI, sans-serif'
+                    }
+                };
+
+                const data = [{
+                    type: 'indicator',
+                    mode: 'gauge+number',
+                    value: 0,
+                    title: { text: title, font: { size: 14 } },
+                    gauge: {
+                        axis: { range: [min, max], tickwidth: 1 },
+                        bar: { color: "#4361ee" },
+                        bgcolor: "white",
+                        borderwidth: 2,
+                        bordercolor: "lightgray",
+                        steps: [
+                            { range: [0, 30], color: "#20c997" },
+                            { range: [30, 70], color: "#fd7e14" },
+                            { range: [70, 100], color: "#dc3545" }
+                        ],
+                    }
+                }];
+
+                Plotly.newPlot(elementId, data, layout, { responsive: true });
+                return document.getElementById(elementId);
+            }
+
+            // Add to processIncomingData function
+            if (data.stress_level !== undefined) {
+                updateStressLevel(data.stress_level);
+            }
+
+            // Update Stress Level
+            function updateStressLevel(stressLevel) {
+                // Convert to a 0-100 scale if needed
+                const stressValue = parseFloat(stressLevel);
+
+                // Update gauge
+                Plotly.update('stress-gauge', {
+                    value: [stressValue]
+                });
+
+                // Update text indicators
+                $('#stress-value-text').text(`Value: ${stressValue.toFixed(1)}`);
+
+                // Update stress level text and color
+                let levelText, levelClass;
+                if (stressValue < 50) {
+                    levelText = "Low";
+                    levelClass = "stress-low";
+                } else if (stressValue < 70) {
+                    levelText = "Medium";
+                    levelClass = "stress-medium";
+                } else {
+                    levelText = "High";
+                    levelClass = "stress-high";
+                }
+
+                $('#stress-level-text').text(levelText)
+                    .removeClass('stress-low stress-medium stress-high')
+                    .addClass(levelClass);
+
+                // Update chart data
+                updateTimeSeriesData(stressData, stressValue, timeLabels);
+                updateLineChart(stressChart, timeLabels, stressData);
+
+                // Add log entry
+                addLogEntry(`Stress level updated: ${stressValue.toFixed(1)} - ${levelText}`);
+
+                // Show alert for high stress
+                if (stressValue >= 80) {
+                    showAlert("High stress level detected!", "warning");
+                }
+            }
+
+            // Add function to update additional metrics
+            function updateAdditionalMetric(id, label, value, unit) {
+                // Check if the element exists, create it if it doesn't
+                if ($(`#${id}-value`).length === 0) {
+                    createMetricElement(id, label, unit);
+                }
+
+                // Update the value
+                $(`#${id}-value`).text(parseFloat(value).toFixed(2));
+            }
+
+            // Function to create a new metric element
+            function createMetricElement(id, label, unit) {
+                const metricHtml = `
+        <div class="col-md-4 col-sm-6 mb-3">
+            <div class="card value-card">
+                <div class="parameter-name">${label}</div>
+                <div class="sensor-value" id="${id}-value">-</div>
+                <div class="unit">${unit}</div>
+            </div>
+        </div>
+    `;
+
+                // Append to the metrics container
+                $('#additional-metrics-row').append(metricHtml);
+            }
+
+            // Function to show alerts
+            function showAlert(message, type) {
+                const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            <strong>${message}</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+
+                // Add to alerts container
+                $('#alerts-container').prepend(alertHtml);
+
+                // Auto-dismiss after 5 seconds
+                setTimeout(function () {
+                    $('.alert').first().alert('close');
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+
+</html>
