@@ -39,7 +39,7 @@ float SpO2 = 0;
 std::vector<unsigned long> rrIntervals;  // Store RR intervals timestamps
 
 // Server URL
-const char* serverUrl = "http://192.168.176.98:5000/receive_data"; // <-- Set your Flask IP here
+const char* serverUrl = "http://192.168.1.8:5000/receive_data"; // <-- Set your Flask IP here
 
 // Patient data
 String uuid = "patient_uuid_123";  // Unique patient ID
